@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block content %}
+<section class="hero">
+  <h1>Find business problems worth testing</h1>
+  <p>Answer five questions. Problem Radar searches public evidence, asks AI to
+     interpret it, checks every quote against its source, and ranks the
+     problems that survive.</p>
+</section>
+
+{% if errors %}
+<div class="alert alert-error" role="alert">
+  <strong>Something needs attention</strong>
+  <ul>{% for e in errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+{% if message %}<div class="alert alert-info" role="status">{{ message }}</div>{% endif %}
+
+<div class="home-grid">
+  <form class="card form" method="post" action="{{ url_for('analyse_route') }}" id="research-form">
+    <h2>Your research brief</h2>
+
+    <label for="sector">1. Which industry or sector do you want to investigate?</label>
+    <input id="sector" name="sector" type="text" maxlength="120" required
+           placeholder="e.g. independent vet clinics" value="{{ answers.sector or '' }}">
+    <p class="hint">Specific works better: "independent vet clinics" beats "healthcare".</p>
+
+    <fieldset>
+      <legend>2. Which geographical market?</legend>
+      <div class="choices">
+        {% for g in geographies %}
+        <label class="choice"><input type="radio" name="geography" value="{{ g }}" required
+          {% if answers.geography == g or (not answers.geography and g == 'UK') %}checked{% endif %}> {{ g }}</label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>3. Who would pay?</legend>
+      <div class="choices">
+        {% for p in payers %}
+        <label class="choice"><input type="radio" name="payer" value="{{ p }}" required
+          {% if answers.payer == p or (not answers.payer and p == 'Businesses') %}checked{% endif %}> {{ p }}</label>
+        {% endfor %}
+      </div>
+    </fieldset>
+
+    <label for="advantage">4. What is your founder advantage?</label>
+    <textarea id="advantage" name="advantage" rows="3" maxlength="400" required
+      placeholder="e.g. 5 years as a practice manager, strong network of vets in Scotland">{{ answers.advantage or '' }}</textarea>
+    <p class="hint">Skills, experience, knowledge or network. Used to judge founder fit.</p>
+
+    <label for="exclude">5. What should the research exclude? <span class="optional">(optional)</span></label>
+    <input id="exclude" name="exclude" type="text" maxlength="200"
+           placeholder="e.g. hardware, heavily regulated products" value="{{ answers.exclude or '' }}">
+
+    <button type="submit" class="btn btn-primary" id="submit-btn">Run research</button>
+    <p class="hint">Usually takes under a minute and uses about 6 Tavily search credits.</p>
+  </form>
+
+  <aside class="side">
+    <div class="card">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li><strong>Gather</strong> 6 web searches and a Hacker News search</li>
+        <li><strong>Interpret</strong> The AI (Gemini, or Groq if Gemini is busy) proposes up to 7 problems as structured data</li>
+        <li><strong>Check</strong> Python verifies quotes and needs 2 independent sources</li>
+        <li><strong>Rank</strong> Python scores each problem from 20 to 100</li>
+      </ol>
+    </div>
+
+    <div class="card">
+      <h2>Saved runs</h2>
+      {% if runs %}
+      <ul class="run-list">
+        {% for r in runs %}
+        <li>
+          <a href="{{ url_for('show_run', run_id=r.id) }}">{{ r.sector }}</a>
+          <span class="muted">{{ r.geography }} · {{ r.created_at[:10] }} · {{ r.problem_count }} problem{{ '' if r.problem_count == 1 else 's' }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+      <a class="btn btn-ghost" href="{{ url_for('demo') }}">Open newest in demo mode</a>
+      {% else %}
+      <p class="muted">No saved runs yet. Each finished analysis is saved here and
+         can be reopened without internet.</p>
+      {% endif %}
+    </div>
+  </aside>
+</div>
+
+<div class="loading" id="loading" hidden>
+  <div class="loading-box" role="status" aria-live="polite">
+    <div class="spinner" aria-hidden="true"></div>
+    <h2>Researching…</h2>
+    <p>Searching the web and Hacker News, asking the AI, then checking every
+       quote. This usually takes under a minute. Please keep this tab open.</p>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.getElementById("research-form").addEventListener("submit", function () {
+    document.getElementById("loading").hidden = false;
+    document.getElementById("submit-btn").disabled = true;
+  });
+  // If the user comes back with the browser's Back button, hide the overlay again.
+  window.addEventListener("pageshow", function () {
+    document.getElementById("loading").hidden = true;
+    document.getElementById("submit-btn").disabled = false;
+  });
+</script>
+{% endblock %}

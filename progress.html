@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Researching… · Problem Radar{% endblock %}
+{% block content %}
+<section class="report-head">
+  <p class="eyebrow">Research in progress</p>
+  <h1>{{ job.answers.sector }}</h1>
+  <p class="meta">{{ job.answers.geography }} · paid by {{ job.answers.payer | lower }}</p>
+</section>
+
+<section class="card progress-card" aria-live="polite">
+  <div class="progress-head">
+    <div class="spinner" aria-hidden="true"></div>
+    <div>
+      <h2 id="current-step">Starting…</h2>
+      <p class="muted">Elapsed: <span id="elapsed">0:00</span>. Usually under 1 minute; longer if Gemini is busy. Keep this tab open;
+         the report opens by itself when it is ready.</p>
+    </div>
+  </div>
+  <ol class="progress-steps" id="steps">
+    {% for step in job.steps %}<li><span class="muted">{{ step.seconds }}s</span> {{ step.message }}</li>{% endfor %}
+  </ol>
+  <p class="muted" id="poll-problem" hidden>Lost contact with the app. Is the black window still open?</p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const statusUrl = "{{ url_for('job_status', job_id=job.id) }}";
+  const pageUrl = "{{ url_for('job_page', job_id=job.id) }}";
+
+  function formatTime(seconds) {
+    const m = Math.floor(seconds / 60), s = seconds % 60;
+    return m + ":" + String(s).padStart(2, "0");
+  }
+
+  async function poll() {
+    try {
+      const response = await fetch(statusUrl, {cache: "no-store"});
+      const data = await response.json();
+      document.getElementById("poll-problem").hidden = true;
+      document.getElementById("elapsed").textContent = formatTime(data.elapsed);
+      const list = document.getElementById("steps");
+      list.innerHTML = "";
+      data.steps.forEach(function (step) {
+        const item = document.createElement("li");
+        const time = document.createElement("span");
+        time.className = "muted";
+        time.textContent = step.seconds + "s ";
+        item.appendChild(time);
+        item.appendChild(document.createTextNode(step.message));
+        list.appendChild(item);
+      });
+      if (data.steps.length) {
+        document.getElementById("current-step").textContent = data.steps[data.steps.length - 1].message;
+      }
+      if (data.status !== "running") {
+        window.location = pageUrl;   // the app sends the report, or the error message
+        return;
+      }
+    } catch (error) {
+      document.getElementById("poll-problem").hidden = false;
+    }
+    setTimeout(poll, 2000);
+  }
+  poll();
+</script>
+{% endblock %}

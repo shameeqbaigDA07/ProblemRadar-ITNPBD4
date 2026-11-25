@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% block title %}{{ run.answers.sector }} · Problem Radar{% endblock %}
+{% block content %}
+{% set ranked = result.ranked or [] %}
+
+{% if demo %}
+<div class="alert alert-info no-print" role="status">
+  <strong>Demo mode.</strong> This is a saved run from {{ run.meta.created_at[:10] }},
+  shown from your computer with no new searches.
+</div>
+{% endif %}
+
+<section class="report-head">
+  <p class="eyebrow">Problem Radar report</p>
+  <h1>{{ run.answers.sector }}</h1>
+  <p class="meta">
+    {{ run.answers.geography }} · paid by {{ run.answers.payer | lower }} ·
+    {{ sources | length }} sources · run {{ run.meta.created_at[:16] | replace('T', ' ') }} UTC ·
+    model {{ run.meta.model }}
+  </p>
+  <p class="meta"><strong>Founder advantage:</strong> {{ run.answers.advantage }}
+    {% if run.answers.exclude %} · <strong>Excluded:</strong> {{ run.answers.exclude }}{% endif %}</p>
+  <div class="actions no-print">
+    <a class="btn" href="{{ url_for('show_brief', run_id=run.id) }}">Open 5-page brief</a>
+    <button class="btn btn-ghost" onclick="window.print()">Print full report</button>
+    <a class="btn btn-ghost" href="{{ url_for('home') }}">New analysis</a>
+    <a class="btn btn-ghost" href="#conclusion">Jump to final conclusion</a>
+  </div>
+</section>
+
+<section class="legend card">
+  <h2>How to read this report</h2>
+  <ul>
+    <li><span class="tag tag-verified">Verified evidence</span> A quote that Python found word for word in the source text.</li>
+    <li><span class="tag tag-ai">AI interpretation</span> The AI's reading of the evidence. Useful, but check it against the sources.</li>
+    <li><span class="tag tag-unverified">Unverified</span> A quote Python could not find, or a claim with no source. Treat as a hypothesis.</li>
+  </ul>
+</section>
+
+{% if not ranked %}
+<section class="card">
+  <h2>No problem passed the evidence rules</h2>
+  <p>The AI proposed problems, but none had verified quotes from at least two independent
+     sources. See the evidence gaps below for the reasons. Try a broader or differently
+     worded sector.</p>
+</section>
+{% else %}
+
+<!-- 1. Top three -->
+<section>
+  <h2 class="section-title"><span class="num">1</span>Top opportunities</h2>
+  <div class="top-grid">
+    {% for p in result.top_three %}
+    <a class="card top-card" href="#p{{ p.rank }}">
+      <div class="top-rank">#{{ p.rank }}</div>
+      <div class="score-big">{{ p.score }}<span>/100</span></div>
+      <h3>{{ p.title }}</h3>
+      <p>{{ p.who }}: {{ p.consequence }}</p>
+      <p class="muted">{{ p.confidence }} confidence · {{ p.independent_sources }} independent sources</p>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<!-- 2. Ranked table -->
+<section>
+  <h2 class="section-title"><span class="num">2</span>Ranked problems</h2>
+  <div class="table-wrap">
+  <table class="ranked">
+    <thead><tr><th>#</th><th>Problem</th><th>Score</th><th>Confidence</th>
+      <th>Market size</th><th>Independent sources</th><th>Verified quotes</th></tr></thead>
+    <tbody>
+    {% for p in ranked %}
+    <tr>
+      <td>{{ p.rank }}</td>
+      <td><a href="#p{{ p.rank }}">{{ p.title }}</a></td>
+      <td><div class="bar"><span style="width: {{ p.score }}%"></span></div>{{ p.score }}</td>
+      <td><span class="conf conf-{{ p.confidence | lower }}">{{ p.confidence }}</span></td>
+      <td>{% if p.market.status == 'estimated' %}{{ p.market.currency }} {{ p.market.low | money }}–{{ p.market.high | money }}{% else %}<span class="muted">Not yet estimated</span>{% endif %}</td>
+      <td>{{ p.independent_sources }}</td>
+      <td>{{ p.verified_quotes }} of {{ p.total_quotes }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<!-- 3-11. Problem cards -->
+<section>
+  <h2 class="section-title"><span class="num">3</span>Problem cards</h2>
+  {% for p in ranked %}
+  <article class="card problem" id="p{{ p.rank }}">
+    <header class="problem-head">
+      <div>
+        <p class="eyebrow">Problem #{{ p.rank }}</p>
+        <h3>{{ p.title }}</h3>
+      </div>
+      <div class="score-big">{{ p.score }}<span>/100</span>
+        <div class="conf conf-{{ p.confidence | lower }}">{{ p.confidence }} confidence</div></div>
+    </header>
+
+    <div class="statement">
+      <span class="tag tag-ai">AI interpretation</span>
+      <dl>
+        <dt>Who</dt><dd>{{ p.who }}</dd>
+        <dt>Situation</dt><dd>{{ p.situation }}</dd>
+        <dt>Consequence</dt><dd>{{ p.consequence }}</dd>
+      </dl>
+    </div>
+
+    <h4><span class="num small">4</span>Evidence</h4>
+    <ul class="evidence">
+      {% for e in p.evidence %}
+      <li class="ev ev-{{ e.status }}">
+        {% if e.status == 'verified' %}<span class="tag tag-verified">Verified quote</span>
+        {% elif e.status == 'unverified' %}<span class="tag tag-unverified">Unverified: not found in source</span>
+        {% else %}<span class="tag tag-unverified">Unknown source {{ e.source_id }}</span>{% endif %}
+        <blockquote>“{{ e.quote }}”</blockquote>
+        {% if e.source %}
+        <p class="cite"><a class="src" href="#src-{{ e.source.id }}">{{ e.source.id }}</a>
+          <a href="{{ e.source.url }}" target="_blank" rel="noopener">{{ e.source.title }}</a>
+          · {{ e.source.domain }}{% if e.source.published %} · {{ e.source.published }}{% endif %}</p>
+        {% endif %}
+        {% if e.supports %}<p class="muted">Shows: {{ e.supports }}</p>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+
+    <div class="two-col">
+      <div>
+        <h4><span class="num small">5</span>Customer touchpoints <span class="tag tag-ai">AI interpretation</span></h4>
+        {% if p.touchpoints %}
+        <ul class="plain">{% for t in p.touchpoints %}
+          <li><strong>{{ t.where }}</strong>{% if t.consequence %}: {{ t.consequence }}{% endif %}</li>
+        {% endfor %}</ul>
+        {% else %}<p class="muted">None identified.</p>{% endif %}
+      </div>
+      <div>
+        <h4><span class="num small">6</span>Micro-trends</h4>
+        {% if p.micro_trends %}
+        <ul class="plain">{% for t in p.micro_trends %}
+          <li>{% if t.type %}<span class="pill">{{ t.type }}</span> {% endif %}{{ t.trend }}
+            {% if t.status == 'sourced' %}{% for s in t.source_ids %}<a class="src" href="#src-{{ s }}">{{ s }}</a> {% endfor %}
+            {% else %}<span class="tag tag-unverified">Unverified</span>{% endif %}</li>
+        {% endfor %}</ul>
+        {% else %}<p class="muted">None identified.</p>{% endif %}
+      </div>
+    </div>
+
+    <h4>Existing alternatives and competitors</h4>
+    {% if p.existing_alternatives %}
+    <ul class="plain">{% for a in p.existing_alternatives %}
+      <li><strong>{{ a.name }}</strong>{% if a.offer %}: {{ a.offer }}{% endif %}
+        {% if a.status == 'sourced' %}<a class="src" href="#src-{{ a.source_id }}">{{ a.source_id }}</a>
+        {% else %}<span class="tag tag-unverified">Unverified</span>{% endif %}</li>
+    {% endfor %}</ul>
+    {% else %}<p class="muted">No competitors were named in the sources. This is a gap, not proof that none exist.</p>{% endif %}
+
+    <h4><span class="num small">7</span>Market size</h4>
+    {% if p.market.status == 'estimated' %}
+    <div class="market">
+      <p class="market-range">{{ p.market.currency }} {{ p.market.low | money }} – {{ p.market.high | money }} <span class="muted">{{ p.market.unit }}</span>
+        <span class="conf conf-{{ p.market.confidence | lower }}">{{ p.market.confidence }} confidence</span></p>
+      <p><strong>Formula:</strong> {{ p.market.formula }}</p>
+      <ul class="plain">{% for i in p.market.inputs %}
+        <li>{{ i.name }}: {{ i.value }} <a class="src" href="#src-{{ i.source_id }}">{{ i.source_id }}</a></li>
+      {% endfor %}</ul>
+      {% if p.market.assumptions %}<p><strong>Assumptions:</strong></p>
+      <ul class="plain">{% for a in p.market.assumptions %}<li>{{ a }}</li>{% endfor %}</ul>{% endif %}
+    </div>
+    {% else %}
+    <p class="muted">Market size cannot yet be estimated. {{ p.market.reason }}</p>
+    {% endif %}
+
+    <h4><span class="num small">8</span>Opportunity score breakdown</h4>
+    <div class="table-wrap">
+    <table class="breakdown">
+      <thead><tr><th>Factor</th><th>Weight</th><th>Score (1–5)</th><th>Points</th><th>Reason given by AI</th></tr></thead>
+      <tbody>
+      {% for b in p.score_breakdown %}
+      <tr><td>{{ b.label }}</td><td>{{ b.weight_pct }}%</td>
+        <td><span class="dots">{% for i in range(1, 6) %}<i class="{{ 'on' if i <= b.score else '' }}"></i>{% endfor %}</span> {{ b.score }}</td>
+        <td>{{ b.points }} / {{ b.max_points }}</td><td>{{ b.reason | link_sources }}{% if b.cites_source is defined and not b.cites_source %} <span class="tag tag-unverified">No source cited</span>{% endif %}</td></tr>
+      {% endfor %}
+      <tr class="total"><td>Total</td><td>100%</td><td></td><td>{{ p.score }} / 100</td><td class="muted">Calculated in Python</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <h4><span class="num small">9</span>Founder fit <span class="tag tag-ai">AI interpretation</span></h4>
+        <p>{{ p.founder_fit or 'Not assessed.' }}</p>
+      </div>
+      <div>
+        <h4><span class="num small">10</span>Riskiest assumption <span class="tag tag-unverified">Hypothesis to test</span></h4>
+        <p>{{ p.riskiest_assumption or 'Not stated.' }}</p>
+      </div>
+    </div>
+
+    <h4><span class="num small">11</span>Two-week validation experiment <span class="tag tag-ai">Recommendation, not yet carried out</span></h4>
+    <div class="experiment">
+      <dl>
+        {% if p.experiment.type %}<dt>Type</dt><dd>{{ p.experiment.type }}</dd>{% endif %}
+        <dt>Objective</dt><dd>{{ p.experiment.objective or 'Not stated.' }}</dd>
+        <dt>Participants</dt><dd>{{ p.experiment.participants or 'Not stated.' }}</dd>
+        <dt>Steps</dt><dd>{% if p.experiment.steps %}<ol>{% for s in p.experiment.steps %}<li>{{ s }}</li>{% endfor %}</ol>{% else %}Not stated.{% endif %}</dd>
+        {% if p.experiment.budget %}<dt>Budget</dt><dd>{{ p.experiment.budget }}</dd>{% endif %}
+        <dt class="ok">Success if</dt><dd>{{ p.experiment.success_criteria or 'Not stated.' }}</dd>
+        <dt class="bad">Failure if</dt><dd>{{ p.experiment.failure_criteria or 'Not stated.' }}</dd>
+      </dl>
+    </div>
+
+    {% if p.unverified_notes %}
+    <h4>Notes from the AI's general knowledge <span class="tag tag-unverified">Unverified</span></h4>
+    <ul class="plain">{% for n in p.unverified_notes %}<li>{{ n }}</li>{% endfor %}</ul>
+    {% endif %}
+  </article>
+  {% endfor %}
+</section>
+{% endif %}
+
+<!-- 12. Evidence gaps -->
+<section class="card">
+  <h2 class="section-title"><span class="num">12</span>Evidence gaps</h2>
+  {% if result.evidence_gaps %}
+  <h4>Questions the sources could not answer</h4>
+  <ul class="plain">{% for g in result.evidence_gaps %}<li>{{ g }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if result.dropped %}
+  <h4>Problems removed by the evidence rules</h4>
+  <ul class="plain">{% for d in result.dropped %}<li><strong>{{ d.title }}</strong>: {{ d.reason }}
+    {% if d.evidence %}<ul class="plain" style="margin:.3rem 0 .6rem 1rem;font-size:.9rem">{% for e in d.evidence %}
+      <li><span class="tag {{ 'tag-verified' if e.status == 'verified' else 'tag-unverified' }}">{{ 'Verified' if e.status == 'verified' else 'Not found in source' if e.status == 'unverified' else 'Unknown source' }}</span>
+        “{{ e.quote }}” —
+        {% if e.source %}<a href="{{ e.source.url }}" target="_blank" rel="noopener">{{ e.source_id }} {{ e.source.domain }}</a>{% else %}{{ e.source_id }}{% endif %}</li>
+    {% endfor %}</ul>{% endif %}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if run.evidence.warnings %}
+  <h4>Research warnings</h4>
+  <ul class="plain">{% for w in run.evidence.warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+  {% endif %}
+  {% if not result.evidence_gaps and not result.dropped and not run.evidence.warnings %}
+  <p class="muted">No gaps were recorded.</p>{% endif %}
+</section>
+
+<!-- 13. Final conclusion (written by Python from the checked results) -->
+<section class="card conclusion conclusion-{{ conclusion.level }}" id="conclusion">
+  <h2 class="section-title"><span class="num">13</span>Final conclusion</h2>
+  <p class="verdict">{{ conclusion.verdict }}</p>
+  {% for paragraph in conclusion.paragraphs %}<p>{{ paragraph }}</p>{% endfor %}
+  <p class="next-step"><strong>Recommended next step:</strong> {{ conclusion.next_step }}</p>
+  <p class="muted">{{ conclusion.caveat }}</p>
+</section>
+
+<!-- Method and sources -->
+<section class="card">
+  <h2>Method</h2>
+  <p>Score = 20 × (0.30 × severity + 0.20 × frequency + 0.20 × market + 0.15 × willingness to pay
+     + 0.15 × competition gap). Each factor is scored 1–5 by the AI with a reason; Python
+     calculates the total, so the range is 20–100. The weights are initial assumptions from
+     the MVP plan, not research findings.</p>
+  <p>A problem is kept only if at least 2 independent sources contain a verified quote.
+     Pages from the same website count once (separate forum threads count separately),
+     and near-copies of the same text count once.</p>
+  <h4>Searches run</h4>
+  <ul class="plain">{% for q in run.evidence.queries %}<li><strong>{{ q.label }}:</strong> {{ q.query }}</li>{% endfor %}
+    <li><strong>Hacker News:</strong> {{ run.answers.sector }} (last two years)</li></ul>
+</section>
+
+<section class="card">
+  <h2>Sources</h2>
+  <div class="table-wrap">
+  <table class="sources">
+    <thead><tr><th>ID</th><th>Source</th><th>Site</th><th>Published</th><th>Found by</th></tr></thead>
+    <tbody>
+    {% for s in sources %}
+    <tr id="src-{{ s.id }}"><td>{{ s.id }}</td>
+      <td><a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.title }}</a></td>
+      <td>{{ s.domain }}</td><td>{{ s.published or '—' }}</td><td>{{ s.query_label }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}
