@@ -1,0 +1,8 @@
+# Secret keys: never upload
+.env
+
+# Python and virtual environment files
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
